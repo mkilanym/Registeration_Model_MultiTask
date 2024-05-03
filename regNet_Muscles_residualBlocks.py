@@ -1,15 +1,7 @@
 import tensorflow as tf
-from keras.models import Model
 from keras.layers import UpSampling3D, concatenate, Cropping3D, ZeroPadding3D, MaxPooling3D
 from keras.layers import Conv3D, LeakyReLU, Input, BatchNormalization, Lambda
 from keras.initializers import RandomNormal
-from keras.optimizers import *
-
-from Dense3DSpatialTransformer_kilany import *
-from keras.metrics import *
-from keras.callbacks import ModelCheckpoint, LearningRateScheduler, TensorBoard, EarlyStopping
-
-
 
 
 def regNet(fixed_image, moving_image, moving_segmentation, kernel_size=3, num_reg_classes=3, addSMToReg=True, filters_multiplier=1.0):
