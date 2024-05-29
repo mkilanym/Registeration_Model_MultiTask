@@ -60,13 +60,13 @@ def regNet(fixed_image, moving_image, moving_segmentation, kernel_size=3, num_re
 
     x_low_res_reg = [_Conv3D_LReLU_BN(x, num_reg_classes, kernel_size=1, strides=1, pad='same', lrelu=False, batch_norm=False) for x in x7] #(batch, (n/4-7)^3, num_classes)
     x_mid_res_reg = [_Conv3D_LReLU_BN(x, num_reg_classes, kernel_size=1, strides=1, pad='same', lrelu=False, batch_norm=False) for x in x11] # (batch, (n/2-18)^3, num_classes)
-    x_high_res_reg = [_Conv3D_LReLU_BN(x, num_reg_classes, kernel_size=1, strides=1, pad='same', lrelu=False, batch_norm=False) for x in x15]  # (batch, (n-40)^3, num_classes)
+    x_high_res_reg = [_Conv3D_LReLU_BN(x, num_reg_classes, kernel_size=1, strides=1, pad='same', lrelu=False, batch_norm=False, name="DVF_{}".format(i)) for i,x in enumerate(x15)]  # (batch, (n-40)^3, num_classes)
 
 
     return x_high_res_reg, x_mid_res_reg, x_low_res_reg
 
 
-def _Conv3D_LReLU_BN(x_in, nf, kernel_size=3, strides=1, pad='valid', lrelu=True, batch_norm=True):
+def _Conv3D_LReLU_BN(x_in, nf, kernel_size=3, strides=1, pad='valid', lrelu=True, batch_norm=True, name=None):
     '''
     Description:
     perform convolution with or without batch normalization and activation layers 
@@ -84,8 +84,8 @@ def _Conv3D_LReLU_BN(x_in, nf, kernel_size=3, strides=1, pad='valid', lrelu=True
     x_out : 5D tensor
     '''
     
-    init_var = RandomNormal(mean=0.0, stddev=0.02)
-    x_out = Conv3D(nf, kernel_size=kernel_size, padding=pad, kernel_initializer=init_var, strides=strides)(x_in)
+    init_var = RandomNormal(mean=0.0, stddev=0.02)  
+    x_out = Conv3D(nf, kernel_size=kernel_size, padding=pad, kernel_initializer=init_var, strides=strides, name=name)(x_in)
     
     if batch_norm:
         x_out = BatchNormalization(center=True, scale=True)(x_out)

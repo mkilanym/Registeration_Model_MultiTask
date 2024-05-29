@@ -47,8 +47,8 @@ class Model_Class():
         TB_File_Path: str, path where the text file will be created
         Curves_Path : str, path to the tensorboard results 
         '''
+        
         FileName = os.path.join(TB_File_Path,"TB.txt")
-
         with open(FileName,"w") as file:
             file.write("export TMPDIR=/tmp/$USER; mkdir -p $TMPDIR; p3tf -m tensorboard.main --logdir '{}' --host res-hpc-gpu01 --port=8078".format(Curves_Path))
 
@@ -107,6 +107,7 @@ class Model_Class():
         Image : 5-D numpy array, the MR-images in the format batch*x*y*z*channels. the channels = len(Selected_Image_Types_List) 
         Label : 5-D numpy array, the reference labels in the format batch*x*y*z*channels. the channels = 14 (12 muscles+ 1 background + 1 in-between fat)
         '''
+        #1- read the contents in Folder_Path
         Contents_List = os.listdir(Folder_Path)
 
         if(len(Contents_List) == 2): # concatenated
@@ -129,10 +130,6 @@ class Model_Class():
         Selected_Image_Types_List: list of str, list of the images' names to be loaded
         save_DVF_Flag            : bool, save DVF if True
         Train_Test_Set           : str, either "Train" or "Test"
-        
-        Outputs
-        Image : 5-D numpy array, the MR-images in the format batch*x*y*z*channels. the channels = len(Selected_Image_Types_List) 
-        Label : 5-D numpy array, the reference labels in the format batch*x*y*z*channels. the channels = 14 (12 muscles+ 1 background + 1 in-between fat)
         '''
         Atlas_Path = Paths_List[0] 
         Cases_Path = Paths_List[1] 
@@ -152,59 +149,102 @@ class Model_Class():
             results = self.model.predict([Case_Image, Atlas_Image, Atlas_Label])
             
             Results_Path = Model_1_Paths["path_to_Results_{}".format(Train_Test_Set)]
-            Reference_Path = Model_1_Paths["path_to_Refrences_{}".format(Train_Test_Set)]
-            
+            Reference_Path = Model_1_Paths["path_to_Refrences_{}".format(Train_Test_Set)]            
             
             np.save(os.path.join(Results_Path, "{}_Fold_0_Conv_Label.npy".format(CaseName)), results[1])
             np.save(os.path.join(Reference_Path, "{}_Labels_Fold_0_Conv.npy".format(CaseName)), Case_Label)
 
 
-            # create a folder that contains a subfolder for each patient containing the corresponding results
-            # this is the same atlas hierarchy of the preprocessed atlas folder
-            Organized_Results = os.path.join(Model_1_Paths["path_to_Results"], "Individual_Folders")
-            Organized_Results = os.path.join(Organized_Results, CaseName)
-
-            os.makedirs(Organized_Results, exist_ok=True)
-            np.save(os.path.join(Organized_Results,"Label_13.npy") , results[1])
-            np.save(os.path.join(Organized_Results, "MR_Images.npy"), results[0])
-
-
-            if("Train" in Train_Test_Set):
-                subString = "Train"
-            else:
-                subString = "Test"
-            
-            Images_Path = os.path.join(ResultsFolder_Path_1,"{}_Input_Images".format(subString))
-            os.makedirs(Images_Path, exist_ok=True)
-            saveEyeResult(os.path.join(Images_Path, "{}_Case_{}.npy".format(CaseName, subString)), Case_Image)
-
-            Controls_Path = os.path.join(ResultsFolder_Path_1, "{}_Control_Images".format(subString))
-            os.makedirs(Controls_Path, exist_ok=True)
-            saveEyeResult(os.path.join(Controls_Path, "{}_Atlas_{}.npy".format(CaseName, subString)), Atlas_Image)
-
-            Controls_Path = os.path.join(ResultsFolder_Path_1, "{}_Control_Labels".format(subString))
-            os.makedirs(Controls_Path, exist_ok=True)
-            saveEyeResult(os.path.join(Controls_Path, "{}_Atlas_{}_Label.npy".format(CaseName, subString)), Atlas_Label)
+            # save all inputs and outputs of the model per case in a separate folder
+            subString = "Train" if "Train" in Train_Test_Set else "Test"
+                  
+            self.Save_Individual_Data(Model_1_Paths["path_to_Results"], ResultsFolder_Path_1, subString, CaseName, results, Case_Image, Atlas_Image, Atlas_Label)         
 
             if (save_DVF_Flag):
                 print("Try to export DVF ---")
+                self.Save_DVF(ResultsFolder_Path_1, subString, CaseName, Case_Image, Atlas_Image, Atlas_Label)
             
-                layer_names=[layer.name for layer in self.model.layers]
+                
+
+    def Save_Individual_Data(self, Individual_Folders_Path, ResultsFolder_Path, subString, CaseName, results, Case_Image, Atlas_Image, Atlas_Label):
+        '''
+        Description:
+        Create a folder that contains a subfolder for each patient containing the corresponding results.
+        This is the same hierarchy of the preprocessed-atlas folder.
         
-                TargetLayer = "conv3d_20"
-                if("conv3d_40" in layer_names):
-                    TargetLayer = "conv3d_40"
+        Inputs:
+        Individual_Folders_Path  : str, path where the "Individual_Folders" folder will be created. This folder will include subfolders per case
+        ResultsFolder_Path       : str, path where the "Input_Images", "_Control_Images" and "_Control_Labels" folders will be created. 
+                                   These folders will contain numpy files corresponding to CaseName
+        subString   : str, either "Train" or "Test" 
+        CaseName    : str, name of a case
+        results     : lit of numpy arrays, the model outputs. result[0] is list of warped mris, result[1] is 5-D 5-D numpy array shows the segmentations of the case.
+        Case_Image  : 5-D numpy array, the MR-images of the target case in the format 1*x*.y*z*channels. the channels = len(Selected_Image_Types_List) 
+        Atlas_Image : 5-D numpy array, the MR-images of the corresponding elastic-atlas in the format 1*x*.y*z*channels. the channels = len(Selected_Image_Types_List)
+        Atlas_Label : 5-D numpy array, the labels of the corresponding elastic-atlas that will be deformed to match the target case.
+                      Its format is 1*x*.y*z*channels. the channels = len(No. of labels)
+        '''
+        Organized_Results = os.path.join(Individual_Folders_Path, "Individual_Folders")
+        Organized_Results = os.path.join(Organized_Results, CaseName)
+        
+        # save the model's outputs (warped moving labels)
+        os.makedirs(Organized_Results, exist_ok=True)
+        np.save(os.path.join(Organized_Results,"Label_13.npy") , results[1])
+        np.save(os.path.join(Organized_Results, "MR_Images.npy"), results[0])
+        
+        # -----------------------------------------------------
+        # save the MRIs of the target case (fixed images) 
+        Images_Path = os.path.join(ResultsFolder_Path,"{}_Input_Images".format(subString))
+        os.makedirs(Images_Path, exist_ok=True)
+        np.save(os.path.join(Images_Path, "{}_Case_{}.npy".format(CaseName, subString)), Case_Image)
+
+        # save the elastix-atlas-MRIs (moving images) that are corresponding to the case 
+        Controls_Path = os.path.join(ResultsFolder_Path, "{}_Control_Images".format(subString))
+        os.makedirs(Controls_Path, exist_ok=True)
+        np.save(os.path.join(Controls_Path, "{}_Atlas_{}.npy".format(CaseName, subString)), Atlas_Image)
+
+        # save the elastix-atlas-labels (moving labels)
+        Controls_Path = os.path.join(ResultsFolder_Path, "{}_Control_Labels".format(subString))
+        os.makedirs(Controls_Path, exist_ok=True)
+        np.save(os.path.join(Controls_Path, "{}_Atlas_{}_Label.npy".format(CaseName, subString)), Atlas_Label)
+        
             
-                DVFModel = Model(inputs= self.model.input, outputs=self.model.get_layer(TargetLayer).output)
-                results = DVFModel.predict([Case_Image, Atlas_Image, Atlas_Label])
+    def Save_DVF(self, savePath, subString, CaseName, Case_Image, Atlas_Image, Atlas_Label):
+        '''
+        Description:
+        save the full-size DVF.
+        Note: this version of the function is optimized to work with the multi-task model. so it saves a DVF per muscle.
+        
+        Inputs:
+        savePath    : str, path where a folder will be created inside to save DVFs
+        subString   : str, either "Train" or "Test" 
+        CaseName    : str, name of a case
+        Case_Image  : 5-D numpy array, the MR-images of the target case in the format 1*x*.y*z*channels. the channels = len(Selected_Image_Types_List) 
+        Atlas_Image : 5-D numpy array, the MR-images of the corresponding elastic-atlas in the format 1*x*.y*z*channels. the channels = len(Selected_Image_Types_List)
+        Atlas_Label : 5-D numpy array, the labels of the corresponding elastic-atlas that will be deformed to match the target case.
+                      Its format is 1*x*.y*z*channels. the channels = len(No. of labels)
+        '''
+        layer_names=[layer.name for layer in self.model.layers]
+        
+        TargetLayers = ["DVF_{}".format(i) for i in range(Atlas_Label.shape[-1])]
+        outputs     = [self.model.get_layer(TargetLayer).output for TargetLayer in TargetLayers] 
+        
+        #TargetLayer = "conv3d_20"
+        #if("conv3d_40" in layer_names):
+        #    TargetLayer = "conv3d_40"
+            
+        DVFModel = Model(inputs= self.model.input, outputs=outputs)
+        results = DVFModel.predict([Case_Image, Atlas_Image, Atlas_Label])
 
-                print("The DVF shape= {}".format(results.shape)) 
-                DVF_Path = os.path.join(ResultsFolder_Path_1, "{}_DVF".format(subString))
-                os.makedirs(DVF_Path, exist_ok=True)
-                saveEyeResult(os.path.join(DVF_Path, "{}_DVF.npy".format(CaseName)), results)
-
-
-
+        print("len(DVF)= {} and DVF[0].shape= {}".format(len(results), results[0].shape))
+         
+        DVF_Path = os.path.join(savePath, "{}_DVF".format(subString))
+        DVF_Path = os.path.join(DVF_Path, "{}".format(CaseName))
+        os.makedirs(DVF_Path, exist_ok=True)
+        for i in range(len(results)):
+            np.save(os.path.join(DVF_Path, "{}_DVF.npy".format(i)), results[i])
+        
+        
 def Iterative_Training_Routine(Model_Dict_Parameters, Paths_TBFolder_List, FOV_info_String, X, Y, No_SubEpochs = 5, Max_No_Cases_Per_Training = 2, No_Iterative_Training = 20, No_Epochs= 100):
     # X is [X, Repeated_Control_Image, Repeated_Control_Label]
 
