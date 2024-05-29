@@ -148,16 +148,15 @@ class Model_Class():
             # predict
             results = self.model.predict([Case_Image, Atlas_Image, Atlas_Label])
             
+            # save predictions
             Results_Path = Model_1_Paths["path_to_Results_{}".format(Train_Test_Set)]
             Reference_Path = Model_1_Paths["path_to_Refrences_{}".format(Train_Test_Set)]            
             
             np.save(os.path.join(Results_Path, "{}_Fold_0_Conv_Label.npy".format(CaseName)), results[1])
             np.save(os.path.join(Reference_Path, "{}_Labels_Fold_0_Conv.npy".format(CaseName)), Case_Label)
 
-
             # save all inputs and outputs of the model per case in a separate folder
-            subString = "Train" if "Train" in Train_Test_Set else "Test"
-                  
+            subString = "Train" if "Train" in Train_Test_Set else "Test"                  
             self.Save_Individual_Data(Model_1_Paths["path_to_Results"], ResultsFolder_Path_1, subString, CaseName, results, Case_Image, Atlas_Image, Atlas_Label)         
 
             if (save_DVF_Flag):
@@ -244,7 +243,7 @@ class Model_Class():
         for i in range(len(results)):
             np.save(os.path.join(DVF_Path, "{}_DVF.npy".format(i)), results[i])
         
-        
+'''        
 def Iterative_Training_Routine(Model_Dict_Parameters, Paths_TBFolder_List, FOV_info_String, X, Y, No_SubEpochs = 5, Max_No_Cases_Per_Training = 2, No_Iterative_Training = 20, No_Epochs= 100):
     # X is [X, Repeated_Control_Image, Repeated_Control_Label]
 
@@ -368,4 +367,4 @@ def Save_References(inFoldDict, Model_Paths, FOV_info_String = "", No_of_Slices 
 
     return 1
 
-
+'''
